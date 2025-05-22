@@ -99,8 +99,35 @@ by_trust <- by_trust |>
   mutate(keepforhna = ifelse((hna_count < 10 & pat_count <=100) | (hna_count < 20 & pat_count > 100), "EXCLUDE", "INCLUDE"),
          keepforpcsp = ifelse((pcsp_count < 10 & pat_count <=100) | (pcsp_count < 20 & pat_count > 100), "EXCLUDE", "INCLUDE")) |>
   mutate(keepforhna = ifelse(is.na(diag_trust), "EXCLUDE", keepforhna),
-         keepforpcsp = ifelse(is.na(diag_trust), "EXCLUDE", keepforpcsp)) |>
-  select(-c(hna_count, pcsp_count, pat_count))
+         keepforpcsp = ifelse(is.na(diag_trust), "EXCLUDE", keepforpcsp)) 
+
+# Create flagged version for reporting exclusion reasons
+by_trust_flagged <- by_trust |>
+  mutate(
+    reason_hna = case_when(
+      is.na(diag_trust) ~ "Missing diag_trust",
+      keepforhna == hna_count < 10 & pat_count <= 100 ~ "<10 HNAs and <=100 patients",
+      keepforhna == hna_count < 20 & pat_count > 100 ~ "<20 HNAs and >100 patients",
+      keepforhna == "INCLUDE" ~ "Included"
+    ),
+    reason_pcsp = case_when(
+      is.na(diag_trust) ~ "Missing diag_trust",
+      keepforpcsp == pcsp_count < 10 & pat_count <= 100 ~ "<10 PCSPs and <=100 patients",
+      keepforpcsp == pcsp_count < 20 & pat_count > 100 ~ "<20 PCSPs and >100 patients",
+      keepforpcsp == "INCLUDE" ~ "Included"
+    )
+  )
+
+# Summarise
+by_trust_flagged |> 
+  filter(keepforhna == "EXCLUDE") |> 
+  count(reason_hna, name = "n") |> 
+  (\(x) bind_rows(x, tibble(reason_hna = "Total", n = sum(x$n))))()
+
+by_trust_flagged |> 
+  filter(keepforpcsp == "EXCLUDE") |> 
+  count(reason_pcsp, name = "n") |> 
+  (\(x) bind_rows(x, tibble(reason_pcsp = "Total", n = sum(x$n))))()
 
 #adding trust inclusion/exclusion status into the HNA/PCSP dataset and excluding non-submitting trusts
 hna_pcsp_data <- left_join(hna_pcsp_data, by_trust, by = "diag_trust", relationship = "many-to-one") 
